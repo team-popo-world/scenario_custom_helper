@@ -653,7 +653,7 @@ def analyze_stock_trends(story_data: list) -> str:
                 else:
                     trend = "등락"
             else:
-                trend = "보합"
+                trend = "변동 없음"
             
             # 원본 종목명 사용
             trend_summaries.append(f"{stock_name} {trend}")
