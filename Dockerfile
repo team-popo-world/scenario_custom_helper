@@ -55,11 +55,11 @@ RUN mkdir -p saved_stories logs && \
 USER appuser
 
 # 포트 노출 (Streamlit과 FastAPI 모두)
-EXPOSE 8501 8000
+EXPOSE 8501 8004
 
 # 헬스체크 추가 (비동기 엔드포인트 포함)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/health && curl -f http://localhost:8000/async-status || exit 1
+    CMD curl -f http://localhost:8004/health && curl -f http://localhost:8004/async-status || exit 1
 
 # 시작 스크립트 실행 권한 설정
 COPY --chown=appuser:appuser docker-entrypoint.sh /usr/local/bin/

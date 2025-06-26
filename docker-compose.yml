@@ -9,7 +9,7 @@ services:
       target: production
     container_name: story-api
     ports:
-      - "8000:8000"
+      - "8004:8004"
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - PYTHONPATH=/app
@@ -21,7 +21,7 @@ services:
     command: ["fastapi"]
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -42,7 +42,7 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - PYTHONPATH=/app
       - ENVIRONMENT=production
-      - API_BASE_URL=http://api:8000
+      - API_BASE_URL=http://api:8004
     volumes:
       - ./saved_stories:/app/saved_stories
       - ./logs:/app/logs
@@ -69,7 +69,7 @@ services:
       target: production
     container_name: story-dev
     ports:
-      - "8001:8000"  # 개발용 포트
+      - "8005:8004"  # 개발용 포트
       - "8502:8501"  # 개발용 Streamlit 포트
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}

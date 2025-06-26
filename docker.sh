@@ -17,13 +17,13 @@ run_api() {
     echo "🚀 FastAPI 서버 실행"
     docker run -d \
         --name story-api \
-        -p 8000:8000 \
+        -p 8004:8004 \
         -e GOOGLE_API_KEY="${GOOGLE_API_KEY}" \
         -v "$(pwd)/saved_stories:/app/saved_stories" \
         -v "$(pwd)/logs:/app/logs" \
         story-edit-app:latest fastapi
     
-    echo "✅ FastAPI 서버 시작됨 (포트: 8000)"
+    echo "✅ FastAPI 서버 시작됨 (포트: 8004)"
 }
 
 run_web() {
