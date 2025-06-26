@@ -346,27 +346,6 @@ class GameCustomizer:
         """GameCustomizer에서 사용할 수 있는 스토리 목록을 반환합니다."""
         return self.story_editor.get_available_stories()
     
-    def debug_story_info(self, story_name: str) -> Dict:
-        """스토리 디버깅 정보를 반환합니다."""
-        import streamlit as st
-        
-        debug_info = {
-            "requested_story_name": story_name,
-            "session_has_game_data": bool(st.session_state.get('current_game_data')),
-            "session_story_name": st.session_state.get('current_story_name'),
-            "available_stories": self.story_editor.get_available_stories(),
-            "stories_dir_exists": os.path.exists(self.story_editor.stories_dir),
-            "stories_dir_files": []
-        }
-        
-        try:
-            if os.path.exists(self.story_editor.stories_dir):
-                debug_info["stories_dir_files"] = [f for f in os.listdir(self.story_editor.stories_dir) if f.endswith('.json')]
-        except:
-            pass
-            
-        return debug_info
-    
     def run_async_modification(self, story_name: str, user_request: str) -> str:
         """
         Streamlit UI에서 비동기 스토리 수정을 실행합니다.

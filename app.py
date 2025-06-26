@@ -51,6 +51,9 @@ def initialize_session_state():
     for key, default_value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = default_value
+    
+    # customizer는 별도로 초기화
+    if st.session_state.customizer is None:
         st.session_state.customizer = GameCustomizer()
         
     # 편집 모드로 고정

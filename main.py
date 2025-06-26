@@ -6,6 +6,7 @@ import logging
 import sys
 import os
 from typing import Dict, Any
+from contextlib import asynccontextmanager
 
 # FastAPI 관련 import
 from fastapi import FastAPI, HTTPException
@@ -36,17 +37,71 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# FastAPI 앱 초기화
-app = FastAPI(
-    title="Story Edit API",
-    description="AI 기반 스토리 편집 API",
-    version="1.0.0"
-)
-
 # 전역 변수
 llm_model = None
 prompt_template = None
 task_manager = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPI 애플리케이션 라이프사이클 관리"""
+    global llm_model, prompt_template, task_manager
+    
+    # 시작 시 초기화
+    try:
+        # API 키 확인
+        api_key = load_api_key()
+        if not api_key:
+            logger.error("Google API 키가 설정되지 않았습니다.")
+            raise ValueError("Google API 키가 설정되지 않았습니다.")
+        
+        # 비동기 작업 관리자 초기화
+        task_manager = AsyncTaskManager()
+        
+        # LLM 모델 초기화 (비동기)
+        logger.info("LLM 모델 비동기 초기화 중...")
+        llm_model = await initialize_llm_async()
+        
+        # 프롬프트 템플릿 생성
+        system_prompt = get_system_prompt()
+        prompt_template = create_prompt_template(system_prompt)
+        
+        logger.info("FastAPI 서버 비동기 초기화 완료")
+        
+    except Exception as e:
+        logger.error(f"서버 초기화 실패: {e}")
+        # 동기 방식으로 폴백 시도
+        try:
+            logger.info("동기 방식으로 LLM 초기화 재시도...")
+            llm_model = initialize_llm()
+            logger.info("동기 방식 LLM 초기화 완료")
+        except Exception as fallback_error:
+            logger.error(f"동기 방식 초기화도 실패: {fallback_error}")
+            raise e
+    
+    yield
+    
+    # 종료 시 정리
+    try:
+        if task_manager:
+            logger.info("비동기 작업 관리자 종료 중...")
+            await task_manager.cleanup()
+            logger.info("비동기 작업 관리자 정리 완료")
+        
+        logger.info("FastAPI 서버 종료 정리 완료")
+        
+    except Exception as e:
+        logger.error(f"서버 종료 중 오류: {e}")
+
+
+# FastAPI 앱 초기화 (lifespan 이벤트 핸들러 사용)
+app = FastAPI(
+    title="Story Edit API",
+    description="AI 기반 스토리 편집 API",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 # 요청 모델 정의
 class StoryEditRequest(BaseModel):
@@ -59,8 +114,6 @@ class ScenarioResponse(BaseModel):
     story: str
     isCustom: bool
     summary: str
-
-# 외부 백엔드 전송 기능 제거됨 - 클라이언트에게만 응답
 
 
 def run_llm_for_edit(original_story: str, edit_request: str) -> str:
@@ -227,98 +280,6 @@ async def run_llm_for_edit_async(original_story: str, edit_request: str) -> str:
     except Exception as e:
         logger.error(f"LLM 스토리 편집 중 오류: {e}")
         raise
-
-
-def determine_chapter_id(story_content: str) -> str:
-    """
-    스토리 내용을 분석하여 적절한 chapterId를 결정합니다.
-    
-    Args:
-        story_content (str): 생성된 스토리 내용
-        
-    Returns:
-        str: 해당하는 chapterId
-    """
-    # 시나리오 타입별 chapterId 매핑
-    CHAPTER_ID_MAPPING = {
-        "three_little_pigs": "1111",
-        "아기돼지": "1111",
-        "아기 돼지": "1111",
-        "돼지": "1111",
-        "foodtruck": "2222",
-        "푸드트럭": "2222",
-        "magic_kingdom": "3333",
-        "마법왕국": "3333",
-        "마법 왕국": "3333",
-        "moonlight_thief": "4444",
-        "달빛도둑": "4444",
-        "달빛 도둑": "4444"
-    }
-    
-    story_lower = story_content.lower()
-    
-    # 키워드 기반으로 chapterId 결정
-    for keyword, chapter_id in CHAPTER_ID_MAPPING.items():
-        if keyword.lower() in story_lower:
-            return chapter_id
-    
-    # 기본값: 달빛 도둑 (4444)
-    return "4444"
-
-
-# send_to_backend 함수 제거됨 - 클라이언트 응답만 제공
-
-
-@app.on_event("startup")
-async def startup_event():
-    """앱 시작시 초기화 (비동기 지원)"""
-    global llm_model, prompt_template, task_manager
-    
-    try:
-        # API 키 확인
-        api_key = load_api_key()
-        if not api_key:
-            logger.error("Google API 키가 설정되지 않았습니다.")
-            raise ValueError("Google API 키가 설정되지 않았습니다.")
-        
-        # 비동기 작업 관리자 초기화
-        task_manager = AsyncTaskManager()
-        
-        # LLM 모델 초기화 (비동기)
-        logger.info("LLM 모델 비동기 초기화 중...")
-        llm_model = await initialize_llm_async()
-        
-        # 프롬프트 템플릿 생성
-        system_prompt = get_system_prompt()
-        prompt_template = create_prompt_template(system_prompt)
-        
-        logger.info("FastAPI 서버 비동기 초기화 완료")
-        
-    except Exception as e:
-        logger.error(f"서버 초기화 실패: {e}")
-        # 동기 방식으로 폴백 시도
-        try:
-            logger.info("동기 방식으로 LLM 초기화 재시도...")
-            llm_model = initialize_llm()
-            logger.info("동기 방식 LLM 초기화 완료")
-        except Exception as fallback_error:
-            logger.error(f"동기 방식 초기화도 실패: {fallback_error}")
-            raise e
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """앱 종료시 리소스 정리"""
-    global task_manager
-    
-    try:
-        if task_manager:
-            logger.info("비동기 작업 관리자 종료 중...")
-            await task_manager.cleanup()
-            logger.info("비동기 작업 관리자 정리 완료")
-        
-    except Exception as e:
-        logger.error(f"종료 처리 중 오류: {e}")
 
 
 @app.get("/")
@@ -748,3 +709,13 @@ def analyze_story_flow(start_turn: str, middle_turn: str, end_turn: str) -> list
             story_flow.append('교훈 정리')
     
     return story_flow
+
+
+if __name__ == "__main__":
+    # 서버 실행
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=8000,
+        log_level="info"
+    )

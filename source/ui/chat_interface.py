@@ -107,11 +107,6 @@ def render_chat_interface(customizer):
                             error_msg = "스토리 이름을 찾을 수 없습니다. 스토리를 다시 불러와주세요."
                             st.error(error_msg)
                             st.session_state.chat_history.append(("assistant", error_msg))
-                            
-                            # 디버깅 정보 표시
-                            debug_info = customizer.debug_story_info("")
-                            with st.expander("🔧 디버깅 정보"):
-                                st.json(debug_info)
                             return
                         
                         # 스토리 수정 요청
@@ -231,20 +226,10 @@ def render_chat_interface(customizer):
                             error_msg = analysis["error"]
                             st.error(error_msg)
                             st.session_state.chat_history.append(("assistant", error_msg))
-                            
-                            # 디버깅 정보 표시
-                            debug_info = customizer.debug_story_info(current_story_name)
-                            with st.expander("🔧 디버깅 정보"):
-                                st.json(debug_info)
                         else:
                             error_msg = "죄송해요, 스토리 수정에 실패했습니다. 다시 시도해주세요."
                             st.error(error_msg)
                             st.session_state.chat_history.append(("assistant", error_msg))
-                            
-                            # 디버깅 정보 표시
-                            debug_info = customizer.debug_story_info(current_story_name)
-                            with st.expander("🔧 디버깅 정보"):
-                                st.json(debug_info)
                             
                     except Exception as e:
                         error_msg = f"오류가 발생했습니다: {str(e)}"
