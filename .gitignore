@@ -48,11 +48,21 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
-# Test files
-test_*.py
-*_test.py
-simple_test.py
-final_verification.py
+# Test files (exclude temporary test files from root)
+/test_*.py
+/*_test.py
+/simple_test.py
+/final_verification.py
+
+# Demo and benchmark files
+*demo*.py
+*benchmark*.py
+*sample*.py
+
+# Test data files
+test_*.json
+*_test.json
+sample_*.json
 
 # Temporary documentation
 *_COMPLETE.md

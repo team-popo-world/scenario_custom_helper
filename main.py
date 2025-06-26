@@ -58,6 +58,7 @@ class ScenarioResponse(BaseModel):
     chapterId: str
     story: str
     isCustom: bool
+    summary: str
 
 # 외부 백엔드 전송 기능 제거됨 - 클라이언트에게만 응답
 
@@ -461,11 +462,15 @@ async def edit_scenario(request: StoryEditRequest):
         except json.JSONDecodeError:
             raise HTTPException(status_code=500, detail="편집된 시나리오가 유효한 JSON 형식이 아닙니다.")
         
+        # 스토리 요약 생성
+        story_summary = generate_story_summary(edited_story_json)
+        
         # 응답 데이터 구성 (한글 보존, 기존 chapterId 유지)
         scenario_response_data = {
             "chapterId": request.chapterId.strip(),
             "story": json.dumps(edited_story_data, ensure_ascii=False, separators=(',', ':')),
-            "isCustom": True
+            "isCustom": True,
+            "summary": story_summary
         }
         
         logger.info(f"스토리 편집 완료 - chapterId: {request.chapterId}")
@@ -527,11 +532,15 @@ async def edit_scenario_async(request: StoryEditRequest):
         except json.JSONDecodeError:
             raise HTTPException(status_code=500, detail="편집된 시나리오가 유효한 JSON 형식이 아닙니다.")
         
+        # 스토리 요약 생성
+        story_summary = generate_story_summary(edited_story_json)
+        
         # 응답 데이터 구성 (한글 보존, 기존 chapterId 유지)
         scenario_response_data = {
             "chapterId": request.chapterId.strip(),
             "story": json.dumps(edited_story_data, ensure_ascii=False, separators=(',', ':')),
-            "isCustom": True
+            "isCustom": True,
+            "summary": story_summary
         }
         
         logger.info(f"비동기 스토리 편집 완료 - chapterId: {request.chapterId}")
@@ -546,12 +555,196 @@ async def edit_scenario_async(request: StoryEditRequest):
         raise HTTPException(status_code=500, detail=f"내부 서버 오류: {str(e)}")
 
 
-if __name__ == "__main__":
-    # 개발용 서버 실행
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+def generate_story_summary(story_json: str) -> str:
+    """
+    스토리 JSON에서 게임 흐름, 주식 종목 변화를 포함한 요약을 생성합니다.
+    
+    Args:
+        story_json (str): 스토리 JSON 문자열
+        
+    Returns:
+        str: 게임 흐름과 주식 종목 변화가 포함된 스토리 요약
+    """
+    try:
+        import json
+        story_data = json.loads(story_json)
+        
+        if not isinstance(story_data, list) or len(story_data) == 0:
+            return "알 수 없는 스토리"
+        
+        # 게임 구조 분석
+        turn_count = len(story_data)
+        
+        # 주식 종목 흐름 분석
+        stock_analysis = analyze_stock_trends(story_data)
+        
+        # 시작, 중간, 끝 턴 분석
+        start_turn = story_data[0].get('result', '') if len(story_data) > 0 else ''
+        middle_turn = story_data[turn_count // 2].get('result', '') if turn_count > 2 else ''
+        end_turn = story_data[-1].get('result', '') if len(story_data) > 1 else ''
+        
+        # 전체 스토리 텍스트 합치기
+        all_text = ' '.join([turn.get('result', '') for turn in story_data]).lower()
+        
+        # 주요 캐릭터 추출
+        main_character = extract_main_character(all_text)
+        
+        # 게임 진행 패턴 분석
+        investment_elements = []
+        if '투자' in all_text or '주식' in all_text:
+            investment_elements.append('투자 결정')
+        if '수익' in all_text or '이익' in all_text:
+            investment_elements.append('수익 관리')
+        if '위험' in all_text or '손실' in all_text:
+            investment_elements.append('위험 대응')
+        
+        # 스토리 진행 흐름 분석
+        story_flow = analyze_story_flow(start_turn, middle_turn, end_turn)
+        
+        # 요약 생성
+        summary_parts = []
+        
+        # 주인공 정보
+        if main_character:
+            summary_parts.append(f"{main_character}의")
+        
+        # 게임 구조
+        summary_parts.append(f"{turn_count}턴")
+        
+        # 주식 종목 흐름 (핵심 정보)
+        if stock_analysis:
+            summary_parts.append(f"[{stock_analysis}]")
+        
+        return ' '.join(summary_parts)
+        
+    except Exception as e:
+        logger.error(f"스토리 요약 생성 실패: {e}")
+        return "투자교육 게임 스토리"
+
+
+def analyze_stock_trends(story_data: list) -> str:
+    """
+    스토리 데이터에서 주식 종목들의 흐름을 분석합니다.
+    
+    Args:
+        story_data (list): 스토리 턴 데이터 리스트
+        
+    Returns:
+        str: 주식 종목 흐름 요약
+    """
+    try:
+        stock_trends = {}
+        
+        # 각 턴의 주식 데이터 수집
+        for turn in story_data:
+            stocks = turn.get('stocks', [])
+            for stock in stocks:
+                stock_name = stock.get('name', '')
+                if not stock_name:
+                    continue
+                
+                before_value = stock.get('before_value', 0)
+                current_value = stock.get('current_value', 0)
+                
+                if stock_name not in stock_trends:
+                    stock_trends[stock_name] = {
+                        'values': [],
+                        'changes': [],
+                        'risk_level': stock.get('risk_level', ''),
+                        'description': stock.get('description', '')
+                    }
+                
+                stock_trends[stock_name]['values'].append({
+                    'before': before_value,
+                    'current': current_value,
+                    'change': current_value - before_value
+                })
+        
+        if not stock_trends:
+            return ""
+        
+        # 주요 종목 분석 (최대 2개)
+        trend_summaries = []
+        
+        for stock_name, data in list(stock_trends.items())[:2]:
+            if not data['values']:
+                continue
+                
+            # 전체 변화 계산
+            first_value = data['values'][0]['before']
+            last_value = data['values'][-1]['current']
+            total_change = last_value - first_value
+            
+            # 변화 패턴 분석
+            changes = [v['change'] for v in data['values']]
+            positive_changes = sum(1 for c in changes if c > 0)
+            negative_changes = sum(1 for c in changes if c < 0)
+            
+            # 흐름 판단
+            if total_change > 0:
+                if positive_changes > negative_changes:
+                    trend = "상승세"
+                else:
+                    trend = "회복세"
+            elif total_change < 0:
+                if negative_changes > positive_changes:
+                    trend = "하락세"
+                else:
+                    trend = "등락"
+            else:
+                trend = "보합"
+            
+            # 원본 종목명 사용
+            trend_summaries.append(f"{stock_name} {trend}")
+        
+        return ', '.join(trend_summaries)
+        
+    except Exception as e:
+        logger.error(f"주식 흐름 분석 실패: {e}")
+        return ""
+
+
+def extract_main_character(all_text: str) -> str:
+    """전체 텍스트에서 주인공을 추출합니다."""
+    character_patterns = {
+        '달빛도둑': ['달빛도둑', '달빛 도둑'],
+        '햇빛도둑': ['햇빛도둑', '햇빛 도둑'],
+        '마법사': ['마법사', '마법왕국'],
+        '아기돼지': ['아기돼지', '돼지'],
+        '푸드트럭 사장': ['푸드트럭', '음식', '요리사']
+    }
+    
+    for char, patterns in character_patterns.items():
+        if any(pattern in all_text for pattern in patterns):
+            return char
+    
+    return ""
+
+
+def analyze_story_flow(start_turn: str, middle_turn: str, end_turn: str) -> list:
+    """스토리 흐름을 분석합니다."""
+    story_flow = []
+    
+    # 시작 부분 분석
+    if '시작' in start_turn or '모험' in start_turn:
+        story_flow.append('모험 시작')
+    elif '왕국' in start_turn or '마법' in start_turn:
+        story_flow.append('세계관 소개')
+    
+    # 중간 부분 분석
+    if middle_turn:
+        if '선택' in middle_turn or '결정' in middle_turn:
+            story_flow.append('핵심 선택')
+        elif '문제' in middle_turn or '위기' in middle_turn:
+            story_flow.append('위기 상황')
+        elif '성장' in middle_turn or '배움' in middle_turn:
+            story_flow.append('학습 과정')
+    
+    # 끝 부분 분석
+    if end_turn:
+        if '성공' in end_turn or '완성' in end_turn:
+            story_flow.append('성공적 완료')
+        elif '교훈' in end_turn or '배움' in end_turn:
+            story_flow.append('교훈 정리')
+    
+    return story_flow

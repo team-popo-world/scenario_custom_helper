@@ -26,7 +26,3 @@ yarl>=1.20.1
 
 # Performance & Monitoring (성능 모니터링)
 psutil>=5.9.0
-
-# Optional: Development & Testing
-# pytest-asyncio>=0.21.0
-# httpx>=0.25.0

@@ -38,7 +38,7 @@ Google Gemini AI를 활용한 투자 교육용 스토리 편집 시스템입니�
 ## 📁 프로젝트 구조
 
 ```
-making_story_chatbot/
+scenario_custom_helper/
 ├── 📱 app.py                        # 메인 Streamlit 웹앱
 ├── 🔌 main.py                       # FastAPI REST API 서버
 ├── 📋 requirements.txt              # Python 패키지 의존성
@@ -48,6 +48,8 @@ making_story_chatbot/
 ├── 🐳 docker-compose.yml           # Docker Compose 설정
 ├── 🔐 .env                          # 환경 변수 (생성 필요)
 ├── 📝 README.md                     # 프로젝트 문서
+├── 📖 docs/                         # 기술 문서
+│   └── TECHNICAL_ARCHITECTURE.md   # 기술 아키텍처 가이드
 ├── 📂 source/                       # 소스 코드
 │   ├── 🔧 components/
 │   │   ├── game_customizer.py      # 🎯 스토리 편집 핵심 로직
@@ -68,7 +70,9 @@ making_story_chatbot/
 │       ├── chatbot_helper.py       # 🤖 챗봇 도우미 기능
 │       ├── security.py             # 🔒 보안 검증 및 콘텐츠 필터링
 │       ├── performance.py          # ⚡ 성능 최적화 및 캐싱
-│       └── error_handler.py        # 🚨 통합 에러 처리 시스템
+│       ├── error_handler.py        # 🚨 통합 에러 처리 시스템
+│       ├── async_handler.py        # ⚡ 비동기 처리 유틸리티
+│       └── logging_config.py       # 📊 통합 로깅 시스템
 └── 📚 saved_stories/               # 편집 대상 스토리 파일들
     ├── game_scenario_magic_kingdom_*.json     # 🏰 마법왕국 스토리
     ├── game_scenario_foodtruck_kingdom_*.json # 🚚 푸드트럭 스토리
@@ -198,9 +202,16 @@ docker run -d -p 8000:8000 -e GOOGLE_API_KEY=your_api_key_here story-editor fast
 {
   "chapterId": "4444",
   "story": "[{\"turn_number\":1,\"result\":\"햇빛도둑의 모험이 시작됩니다...\"}]",
-  "isCustom": true
+  "isCustom": true,
+  "summary": "햇빛도둑의 7턴 [햇빛 보물 상승세, 마법의 상점 회복세]"
 }
 ```
+
+**응답 필드 설명:**
+- `chapterId`: 요청한 챕터 ID
+- `story`: 편집된 스토리 JSON (문자열 형태)
+- `isCustom`: 편집 여부 (항상 true)
+- `summary`: 스토리 요약 - 주인공, 턴 수, 주요 주식 종목의 원본명과 흐름(상승세/하락세/회복세) 정보
 
 ### 🎯 Streamlit 웹앱 사용법
 
@@ -357,6 +368,9 @@ docker run -d -p 8000:8000 -e GOOGLE_API_KEY=your_api_key_here story-editor fast
 - **GET /** - 루트 엔드포인트
 - **GET /health** - 헬스체크  
 - **POST /edit-scenario** - 스토리 편집 (메인 기능)
+  - 응답에 `summary` 필드 포함: 시나리오 요약 정보 제공
+- **POST /edit-scenario-async** - 비동기 스토리 편집
+  - 응답에 `summary` 필드 포함: 시나리오 요약 정보 제공
 - **GET /docs** - API 문서 (Swagger UI)
 
 ## 🛠️ 개발 정보
@@ -575,9 +589,6 @@ pip install -r requirements.txt
 # 코드 스타일 확인
 black source/
 flake8 source/
-
-# 테스트 실행
-pytest tests/
 ```
 
 ## 📞 지원 및 문의
