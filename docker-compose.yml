@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # FastAPI 서버 (메인 API 서비스)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: story-api
+    ports:
+      - "8000:8000"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - PYTHONPATH=/app
+      - ENVIRONMENT=production
+    volumes:
+      - ./saved_stories:/app/saved_stories
+      - ./logs:/app/logs
+      - ./.env:/app/.env:ro
+    command: ["fastapi"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - story-network
+
+  # Streamlit 웹 인터페이스
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: story-web
+    ports:
+      - "8501:8501"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - PYTHONPATH=/app
+      - ENVIRONMENT=production
+      - API_BASE_URL=http://api:8000
+    volumes:
+      - ./saved_stories:/app/saved_stories
+      - ./logs:/app/logs
+      - ./.env:/app/.env:ro
+    command: ["streamlit"]
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - story-network
+
+  # 개발용 서비스 (선택적)
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: story-dev
+    ports:
+      - "8001:8000"  # 개발용 포트
+      - "8502:8501"  # 개발용 Streamlit 포트
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - PYTHONPATH=/app
+      - ENVIRONMENT=development
+      - DEBUG=true
+    volumes:
+      - .:/app
+      - ./saved_stories:/app/saved_stories
+      - ./logs:/app/logs
+    command: ["fastapi"]
+    restart: "no"
+    profiles:
+      - dev
+    networks:
+      - story-network
+
+networks:
+  story-network:
+    driver: bridge
+    name: story-network
+
+volumes:
+  story-data:
+    driver: local
+  story-logs:
+    driver: local
