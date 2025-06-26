@@ -117,6 +117,7 @@ class ScenarioResponse(BaseModel):
     story: str
     isCustom: bool
     summary: str
+    reply: str
 
 
 def run_llm_for_edit(original_story: str, edit_request: str) -> str:
@@ -429,12 +430,16 @@ async def edit_scenario(request: StoryEditRequest):
         # 스토리 요약 생성 (LLM 기반)
         story_summary = await generate_story_summary_with_llm(edited_story_json)
         
+        # 챗봇 답변 생성
+        chatbot_reply = await generate_chatbot_reply(request.editRequest.strip())
+        
         # 응답 데이터 구성 (한글 보존, 기존 chapterId 유지)
         scenario_response_data = {
             "chapterId": request.chapterId.strip(),
             "story": json.dumps(edited_story_data, ensure_ascii=False, separators=(',', ':')),
             "isCustom": True,
-            "summary": story_summary
+            "summary": story_summary,
+            "reply": chatbot_reply
         }
         
         logger.info(f"스토리 편집 완료 - chapterId: {request.chapterId}")
@@ -499,12 +504,16 @@ async def edit_scenario_async(request: StoryEditRequest):
         # 스토리 요약 생성 (LLM 기반)
         story_summary = await generate_story_summary_with_llm(edited_story_json)
         
+        # 챗봇 답변 생성
+        chatbot_reply = await generate_chatbot_reply(request.editRequest.strip())
+        
         # 응답 데이터 구성 (한글 보존, 기존 chapterId 유지)
         scenario_response_data = {
             "chapterId": request.chapterId.strip(),
             "story": json.dumps(edited_story_data, ensure_ascii=False, separators=(',', ':')),
             "isCustom": True,
-            "summary": story_summary
+            "summary": story_summary,
+            "reply": chatbot_reply
         }
         
         logger.info(f"비동기 스토리 편집 완료 - chapterId: {request.chapterId}")
@@ -813,6 +822,84 @@ async def generate_story_summary_with_llm(story_json: str) -> str:
         logger.error(f"LLM 스토리 요약 생성 중 오류: {e}")
         # 오류 발생 시 기존 규칙 기반 요약으로 대체
         return generate_story_summary(story_json)
+
+
+async def generate_chatbot_reply(edit_request: str) -> str:
+    """
+    편집 요청에 대한 챗봇 답변을 생성합니다.
+    
+    Args:
+        edit_request (str): 사용자의 편집 요청
+        
+    Returns:
+        str: 챗봇의 친근한 답변
+    """
+    global llm_model, prompt_template
+    
+    try:
+        if not llm_model or not prompt_template:
+            # LLM이 없을 경우 기본 답변
+            return f"요청해주신 '{edit_request}' 내용을 반영하여 스토리를 수정해보았어요! 새로운 시나리오를 확인해보세요."
+        
+        # 챗봇 답변 생성을 위한 프롬프트
+        reply_prompt = f"""당신은 친근하고 도움이 되는 스토리 편집 챗봇입니다.
+
+사용자가 스토리 편집을 요청했을 때, 요청을 수락하고 완료했음을 알리는 친근한 답변을 생성해주세요.
+
+답변 작성 지침:
+- 50자 이내로 간결하고 친근하게 작성
+- "요청하신 대로", "말씀하신 대로", "원하시는 대로" 등의 표현 사용
+- "~해보았어요", "~했어요", "~드렸어요" 등의 친근한 어미 사용
+- 완료했음을 명확히 표현
+- 결과 확인을 유도하는 표현 포함
+
+좋은 예시:
+"요청하신 대로 고위험 종목이 크게 상승하도록 스토리를 수정했어요!"
+"말씀하신 내용을 반영하여 캐릭터 이름을 바꿔보았어요!"
+"원하시는 대로 난이도를 조정해드렸어요. 확인해보세요!"
+
+사용자 요청: {edit_request}
+
+위 요청에 대한 완료 답변을 생성해주세요."""
+
+        # LLM을 통해 답변 생성 (비동기)
+        try:
+            response = await llm_model.ainvoke([HumanMessage(content=reply_prompt)])
+            reply_result = response.content
+        except Exception as async_error:
+            logger.warning(f"비동기 답변 생성 실패, 동기 방식으로 재시도: {async_error}")
+            try:
+                response = llm_model.invoke([HumanMessage(content=reply_prompt)])
+                reply_result = response.content
+            except Exception as sync_error:
+                logger.error(f"동기 방식 답변 생성도 실패: {sync_error}")
+                reply_result = None
+
+        if not reply_result:
+            return f"요청해주신 '{edit_request}' 내용을 반영하여 스토리를 수정해보았어요!"
+        
+        # 답변 텍스트 정리
+        reply_text = reply_result.strip()
+        
+        # 불필요한 따옴표나 특수문자 제거
+        reply_text = reply_text.replace('"', '').replace("'", '').strip()
+        
+        # 답변이 너무 길면 자연스럽게 잘라내기 (50자 제한)
+        if len(reply_text) > 50:
+            cut_point = 47
+            while cut_point > 30 and reply_text[cut_point] not in ['!', '?', '.', '요', '어', '네', '죠']:
+                cut_point -= 1
+            
+            if cut_point <= 30:
+                reply_text = reply_text[:47] + "..."
+            else:
+                reply_text = reply_text[:cut_point + 1]
+        
+        return reply_text if reply_text else f"요청하신 내용대로 스토리를 수정했어요!"
+        
+    except Exception as e:
+        logger.error(f"챗봇 답변 생성 중 오류: {e}")
+        return f"요청해주신 '{edit_request}' 내용을 반영하여 스토리를 수정해보았어요!"
 
 
 if __name__ == "__main__":
