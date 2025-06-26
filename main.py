@@ -13,6 +13,9 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import uvicorn
 
+# LangChain import
+from langchain.schema import HumanMessage
+
 # 현재 디렉토리를 Python 경로에 추가
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, current_dir)
@@ -423,8 +426,8 @@ async def edit_scenario(request: StoryEditRequest):
         except json.JSONDecodeError:
             raise HTTPException(status_code=500, detail="편집된 시나리오가 유효한 JSON 형식이 아닙니다.")
         
-        # 스토리 요약 생성
-        story_summary = generate_story_summary(edited_story_json)
+        # 스토리 요약 생성 (LLM 기반)
+        story_summary = await generate_story_summary_with_llm(edited_story_json)
         
         # 응답 데이터 구성 (한글 보존, 기존 chapterId 유지)
         scenario_response_data = {
@@ -493,8 +496,8 @@ async def edit_scenario_async(request: StoryEditRequest):
         except json.JSONDecodeError:
             raise HTTPException(status_code=500, detail="편집된 시나리오가 유효한 JSON 형식이 아닙니다.")
         
-        # 스토리 요약 생성
-        story_summary = generate_story_summary(edited_story_json)
+        # 스토리 요약 생성 (LLM 기반)
+        story_summary = await generate_story_summary_with_llm(edited_story_json)
         
         # 응답 데이터 구성 (한글 보존, 기존 chapterId 유지)
         scenario_response_data = {
@@ -709,6 +712,101 @@ def analyze_story_flow(start_turn: str, middle_turn: str, end_turn: str) -> list
             story_flow.append('교훈 정리')
     
     return story_flow
+
+
+async def generate_story_summary_with_llm(story_json: str) -> str:
+    """
+    LLM을 활용하여 스토리의 흐름과 종목별 등락을 자연스럽게 요약합니다.
+    
+    Args:
+        story_json (str): 스토리 JSON 문자열
+        
+    Returns:
+        str: LLM이 생성한 스토리 요약
+    """
+    global llm_model, prompt_template
+    
+    try:
+        if not llm_model or not prompt_template:
+            logger.warning("LLM 모델이 초기화되지 않았습니다.")
+            return generate_story_summary(story_json)
+        
+        # 스토리 요약을 위한 프롬프트 생성
+        summary_prompt = f"""당신은 10세 아동을 위한 투자교육 게임 스토리 분석 전문가입니다.
+
+아래 JSON 스토리 데이터를 분석하여 자연스럽고 매끄러운 한 문장 요약을 생성해주세요.
+
+요약 작성 지침:
+- 120자 이내로 자연스럽게 작성 (공백 포함)
+- 아이들이 이해하기 쉬운 친근한 언어 사용
+- 주인공과 주요 종목들의 흐름을 스토리로 연결
+- 딱딱한 형식보다는 매끄럽고 흥미로운 표현 우선
+- 종목명은 간략히 줄여서 표현 (예: "달빛 방패" → "방패", "목걸이 훔치기" → "목걸이")
+- 상승/하락을 자연스러운 표현으로 (예: "크게 올랐어요", "많이 떨어졌네요", "쭉쭉 올랐어요")
+
+좋은 예시:
+"달빛도둑이 은월 왕국에서 모험하며 방패가 쭉쭉 올라 대성공을 거뒀어요!"
+"아기돼지들이 집짓기 투자로 벽돌집이 크게 오르며 늑대를 물리쳤어요!"
+
+스토리 데이터:
+{story_json}
+
+위 스토리를 분석하여 아이들이 좋아할 만한 자연스럽고 재미있는 한 문장 요약을 생성해주세요."""
+
+        # LLM을 통해 요약 생성 (비동기)
+        try:
+            # 단순 텍스트 생성을 위한 직접 호출
+            messages = [{"role": "user", "content": summary_prompt}]
+            response = await llm_model.ainvoke([HumanMessage(content=summary_prompt)])
+            summary_result = response.content
+        except Exception as async_error:
+            logger.warning(f"비동기 요약 생성 실패, 동기 방식으로 재시도: {async_error}")
+            try:
+                response = llm_model.invoke([HumanMessage(content=summary_prompt)])
+                summary_result = response.content
+            except Exception as sync_error:
+                logger.error(f"동기 방식 요약 생성도 실패: {sync_error}")
+                summary_result = None
+        
+        if not summary_result:
+            logger.warning("LLM 요약 생성 실패, 기본 요약으로 대체합니다.")
+            return generate_story_summary(story_json)
+        
+        # 요약 텍스트 정리 (JSON이나 불필요한 태그 제거)
+        summary_text = summary_result.strip()
+        
+        # JSON 형태로 반환된 경우 텍스트만 추출
+        if summary_text.startswith('{') or summary_text.startswith('['):
+            try:
+                import re
+                # 간단한 텍스트 추출 시도
+                text_match = re.search(r'"([^"]+)"', summary_text)
+                if text_match:
+                    summary_text = text_match.group(1)
+            except:
+                pass
+        
+        # 불필요한 따옴표나 특수문자 제거
+        summary_text = summary_text.replace('"', '').replace("'", '').strip()
+        
+        # 요약이 너무 길면 자연스럽게 잘라내기 (120자 제한)
+        if len(summary_text) > 120:
+            # 문장이 끝나는 지점에서 자르기 시도
+            cut_point = 117
+            while cut_point > 80 and summary_text[cut_point] not in ['!', '?', '.', '요', '다', '네', '죠']:
+                cut_point -= 1
+            
+            if cut_point <= 80:  # 적절한 자를 지점을 못 찾으면 강제로 자르기
+                summary_text = summary_text[:117] + "..."
+            else:
+                summary_text = summary_text[:cut_point + 1]
+        
+        return summary_text if summary_text else generate_story_summary(story_json)
+        
+    except Exception as e:
+        logger.error(f"LLM 스토리 요약 생성 중 오류: {e}")
+        # 오류 발생 시 기존 규칙 기반 요약으로 대체
+        return generate_story_summary(story_json)
 
 
 if __name__ == "__main__":
