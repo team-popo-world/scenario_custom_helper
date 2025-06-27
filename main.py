@@ -430,8 +430,8 @@ async def edit_scenario(request: StoryEditRequest):
         # 스토리 요약 생성 (LLM 기반)
         story_summary = await generate_story_summary_with_llm(edited_story_json)
         
-        # 챗봇 답변 생성
-        chatbot_reply = await generate_chatbot_reply(request.editRequest.strip())
+        # 챗봇 답변 생성 (편집된 스토리 흐름 분석)
+        chatbot_reply = await generate_chatbot_reply(request.editRequest.strip(), edited_story_json)
         
         # 응답 데이터 구성 (한글 보존, 기존 chapterId 유지)
         scenario_response_data = {
@@ -504,8 +504,8 @@ async def edit_scenario_async(request: StoryEditRequest):
         # 스토리 요약 생성 (LLM 기반)
         story_summary = await generate_story_summary_with_llm(edited_story_json)
         
-        # 챗봇 답변 생성
-        chatbot_reply = await generate_chatbot_reply(request.editRequest.strip())
+        # 챗봇 답변 생성 (편집된 스토리 흐름 분석)
+        chatbot_reply = await generate_chatbot_reply(request.editRequest.strip(), edited_story_json)
         
         # 응답 데이터 구성 (한글 보존, 기존 chapterId 유지)
         scenario_response_data = {
@@ -824,43 +824,50 @@ async def generate_story_summary_with_llm(story_json: str) -> str:
         return generate_story_summary(story_json)
 
 
-async def generate_chatbot_reply(edit_request: str) -> str:
+async def generate_chatbot_reply(edit_request: str, edited_story_json: str) -> str:
     """
-    편집 요청에 대한 챗봇 답변을 생성합니다.
+    편집된 스토리의 흐름을 분석하여 디테일한 설명을 생성합니다.
     
     Args:
         edit_request (str): 사용자의 편집 요청
+        edited_story_json (str): 편집된 스토리 JSON 문자열
         
     Returns:
-        str: 챗봇의 친근한 답변
+        str: 스토리 흐름에 대한 디테일한 설명
     """
     global llm_model, prompt_template
     
     try:
         if not llm_model or not prompt_template:
             # LLM이 없을 경우 기본 답변
-            return f"요청해주신 '{edit_request}' 내용을 반영하여 스토리를 수정해보았어요! 새로운 시나리오를 확인해보세요."
+            return f"요청하신 내용을 반영하여 새로운 투자 흐름의 스토리가 완성되었어요!"
         
-        # 챗봇 답변 생성을 위한 프롬프트
-        reply_prompt = f"""당신은 친근하고 도움이 되는 스토리 편집 챗봇입니다.
+        # 스토리 흐름 분석을 위한 프롬프트 
+        reply_prompt = f"""당신은 투자교육 게임 스토리 분석 전문가입니다.
 
-사용자가 스토리 편집을 요청했을 때, 요청을 수락하고 완료했음을 알리는 친근한 답변을 생성해주세요.
+편집된 스토리의 흐름을 분석하여 사용자에게 친근한 완성 안내를 제공해주세요.
 
-답변 작성 지침:
-- 50자 이내로 간결하고 친근하게 작성
-- "요청하신 대로", "말씀하신 대로", "원하시는 대로" 등의 표현 사용
-- "~해보았어요", "~했어요", "~드렸어요" 등의 친근한 어미 사용
-- 완료했음을 명확히 표현
-- 결과 확인을 유도하는 표현 포함
+필수 출력 형식:
+"요청하신 내용을 반영하여 ~~~ 흐름 ~~~의 스토리가 완성되었어요!"
+
+분석 및 설명 지침:
+- 위 형식으로 시작하되, ~~~ 흐름 ~~~ 부분에 스토리의 핵심 흐름을 구체적으로 설명
+- 200자 이내로 구체적이고 디테일하게 작성
+- 종목별 가격 변화와 주요 이벤트의 연관성을 간결하게 포함
+- 턴별 핵심 포인트나 전략적 의미를 자연스럽게 언급
+- 친근하고 이해하기 쉬운 어조로 마무리
 
 좋은 예시:
-"요청하신 대로 고위험 종목이 크게 상승하도록 스토리를 수정했어요!"
-"말씀하신 내용을 반영하여 캐릭터 이름을 바꿔보았어요!"
-"원하시는 대로 난이도를 조정해드렸어요. 확인해보세요!"
+"요청하신 내용을 반영하여 달빛 방패가 초반 98에서 시작해 연회와 구름 등의 기회를 활용하며 최종 250까지 급등하는 흐름의 스토리가 완성되었어요!"
+
+"요청하신 내용을 반영하여 안정성 종목들이 꾸준히 상승하고 마지막 턴에서 대폭 급등하는 흐름의 스토리가 완성되었어요!"
 
 사용자 요청: {edit_request}
 
-위 요청에 대한 완료 답변을 생성해주세요."""
+편집된 스토리 데이터:
+{edited_story_json}
+
+위 스토리의 흐름을 분석하여 지정된 형식으로 완성 안내를 생성해주세요."""
 
         # LLM을 통해 답변 생성 (비동기)
         try:
@@ -876,7 +883,7 @@ async def generate_chatbot_reply(edit_request: str) -> str:
                 reply_result = None
 
         if not reply_result:
-            return f"요청해주신 '{edit_request}' 내용을 반영하여 스토리를 수정해보았어요!"
+            return f"요청하신 내용을 반영하여 새로운 투자 흐름의 스토리가 완성되었어요!"
         
         # 답변 텍스트 정리
         reply_text = reply_result.strip()
@@ -884,22 +891,28 @@ async def generate_chatbot_reply(edit_request: str) -> str:
         # 불필요한 따옴표나 특수문자 제거
         reply_text = reply_text.replace('"', '').replace("'", '').strip()
         
-        # 답변이 너무 길면 자연스럽게 잘라내기 (50자 제한)
-        if len(reply_text) > 50:
-            cut_point = 47
-            while cut_point > 30 and reply_text[cut_point] not in ['!', '?', '.', '요', '어', '네', '죠']:
+        # 지정된 형식으로 시작하지 않는 경우 강제로 형식에 맞추기
+        if not reply_text.startswith("요청하신 내용을 반영하여"):
+            # 기존 텍스트를 흐름 설명 부분으로 활용
+            flow_description = reply_text[:150] if len(reply_text) > 150 else reply_text
+            reply_text = f"요청하신 내용을 반영하여 {flow_description}의 스토리가 완성되었어요!"
+        
+        # 답변이 너무 길면 자연스럽게 잘라내기 (200자 제한)
+        if len(reply_text) > 200:
+            cut_point = 197
+            while cut_point > 150 and reply_text[cut_point] not in ['!', '?', '.', '요', '다', '네', '죠']:
                 cut_point -= 1
             
-            if cut_point <= 30:
-                reply_text = reply_text[:47] + "..."
+            if cut_point <= 150:
+                reply_text = reply_text[:197] + "..."
             else:
                 reply_text = reply_text[:cut_point + 1]
         
-        return reply_text if reply_text else f"요청하신 내용대로 스토리를 수정했어요!"
+        return reply_text if reply_text else f"요청하신 내용을 반영하여 새로운 투자 흐름의 스토리가 완성되었어요!"
         
     except Exception as e:
         logger.error(f"챗봇 답변 생성 중 오류: {e}")
-        return f"요청해주신 '{edit_request}' 내용을 반영하여 스토리를 수정해보았어요!"
+        return f"요청하신 내용을 반영하여 새로운 투자 흐름의 스토리가 완성되었어요!"
 
 
 if __name__ == "__main__":
