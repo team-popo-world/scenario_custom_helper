@@ -430,8 +430,8 @@ async def edit_scenario(request: StoryEditRequest):
         # 스토리 요약 생성 (LLM 기반)
         story_summary = await generate_story_summary_with_llm(edited_story_json)
         
-        # 챗봇 답변 생성
-        chatbot_reply = await generate_chatbot_reply(request.editRequest.strip())
+        # 챗봇 답변 생성 (편집된 스토리 흐름 분석)
+        chatbot_reply = await generate_chatbot_reply(request.editRequest.strip(), edited_story_json)
         
         # 응답 데이터 구성 (한글 보존, 기존 chapterId 유지)
         scenario_response_data = {
@@ -504,8 +504,8 @@ async def edit_scenario_async(request: StoryEditRequest):
         # 스토리 요약 생성 (LLM 기반)
         story_summary = await generate_story_summary_with_llm(edited_story_json)
         
-        # 챗봇 답변 생성
-        chatbot_reply = await generate_chatbot_reply(request.editRequest.strip())
+        # 챗봇 답변 생성 (편집된 스토리 흐름 분석)
+        chatbot_reply = await generate_chatbot_reply(request.editRequest.strip(), edited_story_json)
         
         # 응답 데이터 구성 (한글 보존, 기존 chapterId 유지)
         scenario_response_data = {
@@ -824,43 +824,52 @@ async def generate_story_summary_with_llm(story_json: str) -> str:
         return generate_story_summary(story_json)
 
 
-async def generate_chatbot_reply(edit_request: str) -> str:
+async def generate_chatbot_reply(edit_request: str, edited_story_json: str) -> str:
     """
-    편집 요청에 대한 챗봇 답변을 생성합니다.
+    편집된 스토리의 흐름을 분석하여 디테일한 설명을 생성합니다.
     
     Args:
         edit_request (str): 사용자의 편집 요청
+        edited_story_json (str): 편집된 스토리 JSON 문자열
         
     Returns:
-        str: 챗봇의 친근한 답변
+        str: 스토리 흐름에 대한 디테일한 설명
     """
     global llm_model, prompt_template
     
     try:
         if not llm_model or not prompt_template:
             # LLM이 없을 경우 기본 답변
-            return f"요청해주신 '{edit_request}' 내용을 반영하여 스토리를 수정해보았어요! 새로운 시나리오를 확인해보세요."
+            return f"요청해주신 '{edit_request}' 내용을 반영하여 스토리가 수정되었습니다. 새로운 시나리오의 흐름을 확인해보세요."
         
-        # 챗봇 답변 생성을 위한 프롬프트
-        reply_prompt = f"""당신은 친근하고 도움이 되는 스토리 편집 챗봇입니다.
+        # 스토리 흐름 분석을 위한 프롬프트
+        reply_prompt = f"""당신은 투자교육 게임 스토리 분석 전문가입니다.
 
-사용자가 스토리 편집을 요청했을 때, 요청을 수락하고 완료했음을 알리는 친근한 답변을 생성해주세요.
+편집된 스토리의 흐름을 분석하여 사용자에게 디테일하고 친근한 설명을 제공해주세요.
 
-답변 작성 지침:
-- 50자 이내로 간결하고 친근하게 작성
-- "요청하신 대로", "말씀하신 대로", "원하시는 대로" 등의 표현 사용
-- "~해보았어요", "~했어요", "~드렸어요" 등의 친근한 어미 사용
-- 완료했음을 명확히 표현
-- 결과 확인을 유도하는 표현 포함
+분석 및 설명 지침:
+- 200자 이내로 구체적이고 디테일하게 작성
+- 종목별 가격 변화와 주요 이벤트의 연관성 설명
+- 턴별 핵심 포인트와 전략적 의미 분석
+- 친근하고 이해하기 쉬운 어조 사용
+- 투자 교육적 관점에서의 인사이트 제공
+
+분석 포인트:
+- 각 종목의 가격 변화 패턴과 이유
+- 뉴스/이벤트가 종목에 미친 영향
+- 위험도별 종목 성과 비교
+- 투자 타이밍과 기회 포착
+- 전체적인 스토리 흐름의 교육적 의미
 
 좋은 예시:
-"요청하신 대로 고위험 종목이 크게 상승하도록 스토리를 수정했어요!"
-"말씀하신 내용을 반영하여 캐릭터 이름을 바꿔보았어요!"
-"원하시는 대로 난이도를 조정해드렸어요. 확인해보세요!"
+"달빛 방패는 초반 98에서 시작해 연회와 구름 등의 기회를 활용하며 최종 250까지 상승했어요! 특히 5-6턴 마술사 공연과 축제에서 대폭 급등하며 고위험 투자의 묘미를 보여주는 스토리로 편집되었습니다."
 
 사용자 요청: {edit_request}
 
-위 요청에 대한 완료 답변을 생성해주세요."""
+편집된 스토리 데이터:
+{edited_story_json}
+
+위 스토리의 흐름을 분석하여 디테일한 설명을 생성해주세요."""
 
         # LLM을 통해 답변 생성 (비동기)
         try:
@@ -876,7 +885,7 @@ async def generate_chatbot_reply(edit_request: str) -> str:
                 reply_result = None
 
         if not reply_result:
-            return f"요청해주신 '{edit_request}' 내용을 반영하여 스토리를 수정해보았어요!"
+            return f"요청해주신 '{edit_request}' 내용을 반영하여 스토리가 수정되었습니다. 새로운 흐름을 확인해보세요."
         
         # 답변 텍스트 정리
         reply_text = reply_result.strip()
@@ -884,22 +893,22 @@ async def generate_chatbot_reply(edit_request: str) -> str:
         # 불필요한 따옴표나 특수문자 제거
         reply_text = reply_text.replace('"', '').replace("'", '').strip()
         
-        # 답변이 너무 길면 자연스럽게 잘라내기 (50자 제한)
-        if len(reply_text) > 50:
-            cut_point = 47
-            while cut_point > 30 and reply_text[cut_point] not in ['!', '?', '.', '요', '어', '네', '죠']:
+        # 답변이 너무 길면 자연스럽게 잘라내기 (200자 제한)
+        if len(reply_text) > 200:
+            cut_point = 197
+            while cut_point > 150 and reply_text[cut_point] not in ['!', '?', '.', '요', '다', '네', '죠']:
                 cut_point -= 1
             
-            if cut_point <= 30:
-                reply_text = reply_text[:47] + "..."
+            if cut_point <= 150:
+                reply_text = reply_text[:197] + "..."
             else:
                 reply_text = reply_text[:cut_point + 1]
         
-        return reply_text if reply_text else f"요청하신 내용대로 스토리를 수정했어요!"
+        return reply_text if reply_text else f"요청하신 내용이 반영된 새로운 스토리 흐름을 확인해보세요!"
         
     except Exception as e:
         logger.error(f"챗봇 답변 생성 중 오류: {e}")
-        return f"요청해주신 '{edit_request}' 내용을 반영하여 스토리를 수정해보았어요!"
+        return f"요청해주신 '{edit_request}' 내용을 반영하여 스토리가 수정되었습니다. 새로운 시나리오의 흐름을 확인해보세요."
 
 
 if __name__ == "__main__":
