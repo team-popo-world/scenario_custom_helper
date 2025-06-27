@@ -840,36 +840,34 @@ async def generate_chatbot_reply(edit_request: str, edited_story_json: str) -> s
     try:
         if not llm_model or not prompt_template:
             # LLM이 없을 경우 기본 답변
-            return f"요청해주신 '{edit_request}' 내용을 반영하여 스토리가 수정되었습니다. 새로운 시나리오의 흐름을 확인해보세요."
+            return f"요청하신 내용을 반영하여 새로운 투자 흐름의 스토리가 완성되었어요!"
         
-        # 스토리 흐름 분석을 위한 프롬프트
+        # 스토리 흐름 분석을 위한 프롬프트 
         reply_prompt = f"""당신은 투자교육 게임 스토리 분석 전문가입니다.
 
-편집된 스토리의 흐름을 분석하여 사용자에게 디테일하고 친근한 설명을 제공해주세요.
+편집된 스토리의 흐름을 분석하여 사용자에게 친근한 완성 안내를 제공해주세요.
+
+필수 출력 형식:
+"요청하신 내용을 반영하여 ~~~ 흐름 ~~~의 스토리가 완성되었어요!"
 
 분석 및 설명 지침:
+- 위 형식으로 시작하되, ~~~ 흐름 ~~~ 부분에 스토리의 핵심 흐름을 구체적으로 설명
 - 200자 이내로 구체적이고 디테일하게 작성
-- 종목별 가격 변화와 주요 이벤트의 연관성 설명
-- 턴별 핵심 포인트와 전략적 의미 분석
-- 친근하고 이해하기 쉬운 어조 사용
-- 투자 교육적 관점에서의 인사이트 제공
-
-분석 포인트:
-- 각 종목의 가격 변화 패턴과 이유
-- 뉴스/이벤트가 종목에 미친 영향
-- 위험도별 종목 성과 비교
-- 투자 타이밍과 기회 포착
-- 전체적인 스토리 흐름의 교육적 의미
+- 종목별 가격 변화와 주요 이벤트의 연관성을 간결하게 포함
+- 턴별 핵심 포인트나 전략적 의미를 자연스럽게 언급
+- 친근하고 이해하기 쉬운 어조로 마무리
 
 좋은 예시:
-"달빛 방패는 초반 98에서 시작해 연회와 구름 등의 기회를 활용하며 최종 250까지 상승했어요! 특히 5-6턴 마술사 공연과 축제에서 대폭 급등하며 고위험 투자의 묘미를 보여주는 스토리로 편집되었습니다."
+"요청하신 내용을 반영하여 달빛 방패가 초반 98에서 시작해 연회와 구름 등의 기회를 활용하며 최종 250까지 급등하는 흐름의 스토리가 완성되었어요!"
+
+"요청하신 내용을 반영하여 안정성 종목들이 꾸준히 상승하고 마지막 턴에서 대폭 급등하는 흐름의 스토리가 완성되었어요!"
 
 사용자 요청: {edit_request}
 
 편집된 스토리 데이터:
 {edited_story_json}
 
-위 스토리의 흐름을 분석하여 디테일한 설명을 생성해주세요."""
+위 스토리의 흐름을 분석하여 지정된 형식으로 완성 안내를 생성해주세요."""
 
         # LLM을 통해 답변 생성 (비동기)
         try:
@@ -885,13 +883,19 @@ async def generate_chatbot_reply(edit_request: str, edited_story_json: str) -> s
                 reply_result = None
 
         if not reply_result:
-            return f"요청해주신 '{edit_request}' 내용을 반영하여 스토리가 수정되었습니다. 새로운 흐름을 확인해보세요."
+            return f"요청하신 내용을 반영하여 새로운 투자 흐름의 스토리가 완성되었어요!"
         
         # 답변 텍스트 정리
         reply_text = reply_result.strip()
         
         # 불필요한 따옴표나 특수문자 제거
         reply_text = reply_text.replace('"', '').replace("'", '').strip()
+        
+        # 지정된 형식으로 시작하지 않는 경우 강제로 형식에 맞추기
+        if not reply_text.startswith("요청하신 내용을 반영하여"):
+            # 기존 텍스트를 흐름 설명 부분으로 활용
+            flow_description = reply_text[:150] if len(reply_text) > 150 else reply_text
+            reply_text = f"요청하신 내용을 반영하여 {flow_description}의 스토리가 완성되었어요!"
         
         # 답변이 너무 길면 자연스럽게 잘라내기 (200자 제한)
         if len(reply_text) > 200:
@@ -904,11 +908,11 @@ async def generate_chatbot_reply(edit_request: str, edited_story_json: str) -> s
             else:
                 reply_text = reply_text[:cut_point + 1]
         
-        return reply_text if reply_text else f"요청하신 내용이 반영된 새로운 스토리 흐름을 확인해보세요!"
+        return reply_text if reply_text else f"요청하신 내용을 반영하여 새로운 투자 흐름의 스토리가 완성되었어요!"
         
     except Exception as e:
         logger.error(f"챗봇 답변 생성 중 오류: {e}")
-        return f"요청해주신 '{edit_request}' 내용을 반영하여 스토리가 수정되었습니다. 새로운 시나리오의 흐름을 확인해보세요."
+        return f"요청하신 내용을 반영하여 새로운 투자 흐름의 스토리가 완성되었어요!"
 
 
 if __name__ == "__main__":
